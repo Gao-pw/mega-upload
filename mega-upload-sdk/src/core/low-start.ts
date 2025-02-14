@@ -12,14 +12,14 @@ import fileSize from "@/utils/size";
  */
 class LowStart {
 
-    static defalutSize = fileSize.kbToBytes(500);
+    static defalutSize = fileSize.kbToBytes(256);
 
-    //* 上传区块大小， 默认 500 KB
+    //* 上传区块大小， 默认 256 KB
     private _chunkWindowSize = (1 * LowStart.defalutSize);
 
     //* 调整次数
     private _acknum = 1;
-    
+
     //* 网络传输阈值，只要 5s 内上传完成，则认为网络畅通。
     private _threshold = 5000;
     public get chunkWindowSize() {
@@ -29,7 +29,7 @@ class LowStart {
         this._chunkWindowSize = value;
     }
 
-    public async changeSize(upload: <T, U extends unknown[]>(...args: U) => Promise<T>){
+    public async changeSize(upload: <T, U extends unknown[]>(...args: U) => Promise<T>) {
         const lastTime = dayjs().valueOf();
         const result = await upload();
         const currentTime = dayjs().valueOf();
@@ -38,39 +38,39 @@ class LowStart {
         const real_consumption = currentTime - lastTime;
 
         //* 分段阈值
-        const segment_threshold =  (this._threshold * (3 / 4));
+        const segment_threshold = (this._threshold * (3 / 4));
 
-        if(real_consumption <= this._threshold){
+        if (real_consumption <= this._threshold) {
 
-            if(real_consumption === this._threshold){
+            if (real_consumption === this._threshold) {
                 //! nothing to do
                 return result;
             }
 
-            if(real_consumption < segment_threshold){
+            if (real_consumption < segment_threshold) {
                 //* 网络非常畅通，翻倍区块大小
                 this.chunkWindowSize += (Math.pow(this._acknum, 2) * LowStart.defalutSize);
             }
 
-            if(real_consumption >= segment_threshold){
+            if (real_consumption >= segment_threshold) {
                 //* 此时网速不满足，小幅调整区块大小, 逐渐逼近网速阈值, +1, 并且适当调整整个网络阈值
                 this.chunkWindowSize += (1 * LowStart.defalutSize);
             }
-
             this._acknum += 1;
-            return result;
-        }else{
+
+        } else {
             //! 拥塞发生，需要调整
-            if(this._acknum === 1){
-                //! 第一次就拥塞，减少 窗口 大小, 每次减少 100 kb；
-                this.chunkWindowSize = this.chunkWindowSize - fileSize.kbToBytes(100);
-            }else{
+            if (this._acknum === 1) {
+                //! 第一次就拥塞，减少 窗口 大小, 每次减少 1/3 左右；
+                this.chunkWindowSize = (this.chunkWindowSize * (2 / 3));
+            } else {
                 this.chunkWindowSize = Math.floor(this.chunkWindowSize / 2);
                 //! 重置调整次数，重新开始计算
                 this._acknum = 1;
                 this._threshold = 5000;
             }
         }
+        return result;
     }
 }
 
