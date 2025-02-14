@@ -53,7 +53,7 @@ class LowStart {
             }
 
             if (real_consumption >= segment_threshold) {
-                //* 此时网速不满足，小幅调整区块大小, 逐渐逼近网速阈值, +1, 并且适当调整整个网络阈值
+                //* 此时网速不满足，小幅调整区块大小, 逐渐逼近网速阈值, +1
                 this.chunkWindowSize += (1 * LowStart.defalutSize);
             }
             this._acknum += 1;
