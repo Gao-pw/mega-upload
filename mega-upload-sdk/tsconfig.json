@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    "target": "ESNext",
     /* Modules */
-    "module": "ES6" /* Specify what module code is generated. */,
+    "module": "ESNext" /* Specify what module code is generated. */,
     "rootDir": "./src" /* Specify the root folder within your source files. */,
     "moduleResolution": "node" /* Specify how TypeScript looks up a file from a given module specifier. */,
-
+    "lib": ["ESNext", "WebWorker"], 
     "declaration": true /* Generate .d.ts files from TypeScript and JavaScript files in your project. */,
 
     "outDir": "./dist" /* Specify an output folder for all emitted files. */,
