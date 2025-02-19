@@ -1,5 +1,6 @@
 import { dayjs } from "@siroi/fe-utils";
 import fileSize from "@/utils/size";
+import requestPool from "./max-request";
 
 
 /**
@@ -30,12 +31,10 @@ class LowStart {
     }
 
     public async changeSize(upload: <T, U extends unknown[]>(...args: U) => Promise<T>) {
-        const lastTime = dayjs().valueOf();
-        const result = await upload();
-        const currentTime = dayjs().valueOf();
+        const { data, ConsumptionTime } = await requestPool.run(upload);
 
         //* 实际消耗时间，单位 ms
-        const real_consumption = currentTime - lastTime;
+        const real_consumption = ConsumptionTime;
 
         //* 分段阈值
         const segment_threshold = (this._threshold * (3 / 4));
@@ -44,7 +43,7 @@ class LowStart {
 
             if (real_consumption === this._threshold) {
                 //! nothing to do
-                return result;
+                return data;
             }
 
             if (real_consumption < segment_threshold) {
@@ -70,7 +69,7 @@ class LowStart {
                 this._threshold = 5000;
             }
         }
-        return result;
+        return data;
     }
 }
 
