@@ -1,12 +1,21 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+//@ts-nocheck 
 import { IHasher, createMD5, md5 } from "hash-wasm";
+import LowStart from "./low-start";
+import { watch } from "@siroi/fe-utils";
+
+type Toptions = {
+    success_size?: number;
+    success_callback?: (index: number, _success_size: number) => void;
+    hash_type?: "all" | "sample";
+    check: (filename: string, hash: string, size: number) => Promise<{ code: number, uploadedSize: number, startNum: number }>;
+    merge?: (hash: string, filename: string) => Promise<unknown>;
+    upload: (data?: Partial<{ size: number, hash: string, blob: Blob, index: number, filename: string, abortController: AbortController }>) => () => Promise<unknown>;
+}
 
 type FileUploadConstructor = {
     file: File;
-    options?: {
-        success_size?: number;
-        success_callback?: (index: number, _success_size: number) => void;
-        hash_type?: "all" | "sample";
-    };
+    options?: Toptions;
 };
 
 
@@ -22,6 +31,16 @@ class FileUpload {
     private file: File;
 
     private hash_loading: boolean = false;
+
+    private isStop: boolean = false;
+    private _watch = null;
+
+    //* 为了兼容💩山，只能使用 Currying 的方式去传递
+    private uploadFun: Toptions['upload'] = () => async () => { };
+
+    private checkFun: Toptions['check'] = () => Promise.resolve({ code: 0, uploadedSize: 0, startNum: 0 });
+
+    private mergeFun: (hash: string, filename: string) => Promise<unknown>;
 
     private hash_type: "all" | "sample" = "sample";
 
@@ -88,9 +107,9 @@ class FileUpload {
 
 
     /**
-     * @description 计算全量 hash 值 => 改为 worker 计算，还是很慢
+     * @description 计算全量 hash 值
      * @author siroi
-     *
+     * @deprecated 使用 worker 计算，还是很慢
      * @async
      * @returns {unknown}
      */
@@ -146,8 +165,6 @@ class FileUpload {
         }
 
         this.hash_loading = false;
-
-        return this.hash;
     }
 
 
@@ -156,14 +173,110 @@ class FileUpload {
         this.success_size = props.options?.success_size || 0;
         this.success_callback = props.options?.success_callback || (() => { });
         this.hash_type = props.options?.hash_type || "sample";
+        if (props.options?.upload) {
+            this.uploadFun = props.options?.upload;
+        }
+
+        if (props.options?.check) {
+            this.checkFun = props.options.check;
+        }
+
+        this.mergeFun = props.options?.merge || (async () => { });
     }
 
     public add_success_callback(fun: () => void) {
         this.success_callback = fun;
     }
 
-    public async upload() {
-        this.createHashAndBlob();
+    //* 服务器校验
+    private async server_check() {
+        //todo 更新 上传进度 success_size
+        const { code, uploadedSize, startNum } = await this.checkFun(this.file.name, this.hash, this.file.size);
+        if (code === 10001) {
+            this.success_size = uploadedSize;
+            this.success_index = startNum;
+        }
+
+        if (code === 10003) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public async upload(cb: (status: boolean, progress?: { success_size: number, success_index?: number }) => void) {
+        this.isStop = false;
+        //* 先计算 hash
+        await this.createHashAndBlob();
+
+        //todo 此处需要对历史的 hash 进行校验
+        const status = await this.server_check();
+        if (status) {
+            //* 已经上传完了直接返回结果：文件秒传
+            cb(true, { success_size: this.file.size });
+            return true;
+        }
+
+        //* 创建慢上传对象
+        const lowStart = new LowStart();
+
+        let abortController = null;
+
+
+        //todo 断点续传
+
+        while ((this.success_size < this.file.size) && this.isStop === false) {
+            try {
+                const size = Math.min(lowStart.chunkWindowSize, this.file.size - this.success_size);
+
+                abortController = new AbortController();
+
+                this._watch = watch(this.isStop, (newVal) => {
+                    if (newVal) {
+                        abortController?.abort();
+                    }
+                });
+
+                //* 读取当前区块的 blob 数据
+                const blob = this.file.slice(this.success_size, this.success_size + size);
+
+                await lowStart.changeSize(this.uploadFun({ blob: blob, hash: this.hash!, index: this.success_index, filename: this.file.name, abortController, size }), {
+                    abortController,
+                    stop: this.isStop,
+                });
+
+                this.success_size += size;
+                this.success_index += 1;
+
+                cb(false, { success_size: this.success_size, success_index: this.success_index });
+
+                // this.success_callback(this.file.size, this.success_size, );
+            }
+            catch (e) {
+                console.log(e);
+                this.isStop = true;
+                break;
+            }
+        }
+
+        console.log("上传进度", this.success_size, this.file.size);
+
+        if (this.success_size === this.file.size) {
+            //* 调用 合并 接口
+            await this.mergeFun(this.hash!, this.file.name);
+            cb(true, {success_size: this.success_size });
+        }
+
+
+    }
+
+    //* 暂停上传
+    public async stop() {
+        console.log("暂停上传");
+        this.isStop = true;
+        if (this._watch !== null) {
+            this._watch.value = true;
+        }
     }
 
     private async all_workder(): Promise<string> {
