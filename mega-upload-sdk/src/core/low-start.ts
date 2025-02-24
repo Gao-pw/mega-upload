@@ -1,4 +1,4 @@
-import { dayjs } from "@siroi/fe-utils";
+import { watch } from "@siroi/fe-utils";
 import fileSize from "@/utils/size";
 import requestPool from "./max-request";
 
@@ -30,7 +30,24 @@ class LowStart {
         this._chunkWindowSize = value;
     }
 
-    public async changeSize(upload: <T, U extends unknown[]>(...args: U) => Promise<T>) {
+
+    public async changeSize(upload: <T, U extends unknown[]>(...args: U) => Promise<T>, context: {abortController: AbortController, stop: boolean}) {
+        const {abortController, stop} = context;
+
+        const tmp = {value: stop};
+
+        console.log(abortController, stop, tmp);
+
+        //* 监听 stop 信号，如果停止上传，则中断请求。
+        watch(tmp, (current) => {
+            console.log("stop", current);
+            //@ts-expect-error  best practice, but it's ok here.
+            if(current.value === true){
+                abortController.abort();
+            }
+        });
+
+        
         const { data, ConsumptionTime } = await requestPool.run(upload);
 
         //* 实际消耗时间，单位 ms
