@@ -3,23 +3,27 @@ import { UploadService } from './upload.service';
 import { UploadController } from './upload.controller';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { creatDirPath, customEngine } from './util';
+import * as fs from 'fs-extra';
 
 @Module({
   imports: [
     MulterModule.registerAsync({
       useFactory: async () => ({
         storage: diskStorage({
-          destination: './public',
-          filename: (req, file, cb) => {
-            const {hash, index, size} = req.body;
-            const { originalname } = file;
-            
-            //* 如果没传完，就先存为tmp文件
-            if(file.size === undefined){
-              return cb(null, `${originalname}.${hash}.${index}.tmp`)
-            }
+          destination: (req, file, cb) => {
+            const _path = creatDirPath(req.body.filename);
+            fs.ensureDirSync(_path);
+            return cb(null, _path) ;
+          },
+          filename: async (req, file, cb) => {
+            const { hash, index, size, filename: originalname } = req.body;
+            req.on('error', () => {
+              console.log('强制关闭 http 流');
+              cb({message: '文件上传中止', name: 'file-stop'}, `${index}.${originalname}.${hash}`);
+            });
             //* 否则存为最终文件
-            return cb(null, `${originalname}.${hash}.${index}`);
+            return cb(null, `${index}.${originalname}.${hash}`);
           },
         }),
       }),
@@ -28,4 +32,4 @@ import { diskStorage } from 'multer';
   controllers: [UploadController],
   providers: [UploadService],
 })
-export class UploadModule {}
+export class UploadModule { }
