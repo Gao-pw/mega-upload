@@ -1,4 +1,5 @@
-import {dayjs} from '@siroi/fe-utils'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import {dayjs} from '@siroi/fe-utils';
 
 /**
  * @description 请求池，用于限制同时进行的异步操作数量，以避免过多的并发请求对浏览器的压力
@@ -10,9 +11,9 @@ import {dayjs} from '@siroi/fe-utils'
 class RequestPool {
     private static POOL_SIZE = 6;
 
-    constructor(private pool: (() => Promise<any>)[] = []) {}
+    constructor(private pool: (() => Promise<unknown>)[] = []) {}
 
-    public async run(request: () => Promise<any>) {
+    public async run(request: () => Promise<unknown>) {
         //* 当请求池达到最大容量时，等待最早加入的请求完成
         if (this.pool.length >= RequestPool.POOL_SIZE) {
             await Promise.race(this.pool);
@@ -21,11 +22,12 @@ class RequestPool {
         }
 
         //* 标记请求是否完成的辅助属性
-        const wrappedRequest = (): Promise<any> => request()
+        const wrappedRequest = (): Promise<unknown> => request()
            .then(() => {
             (request as any)[Symbol.for('isResolved')] = true;
             })
            .catch(() => {
+            console.log('请求失败，但仍标记为已完成');
             (request as any)[Symbol.for('isResolved')] = true;
             });
 
